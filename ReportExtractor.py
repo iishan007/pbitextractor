@@ -38,8 +38,7 @@ class ReportExtractor:
             except KeyError:
                 if 'expression' in i['partitions'][0]['source']:
                 	Source = i['partitions'][0]['source']['expression']
-                else:
-                	Source: ""
+                else:Source: [""] # type: ignore
             data_model.append([report_name, Name, Mode, Type, Source])
 
         data_model_df = pd.DataFrame(columns=['Report Name', 'Name', 'Mode', 'Type', 'Source'], data=data_model)

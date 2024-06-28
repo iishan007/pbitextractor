@@ -8,11 +8,11 @@ import os
 class ReportExtractor:
     def __init__(self, path, name):
         self.path = path
-        self.name = name
+        self.name = name.replace('temp_', '')  # Remove 'temp_' prefix
         self.result = []
 
     def extract(self):
-        pathFolder = f'{self.path}/{self.name[:-5]}'
+        pathFolder = f'{self.path}/temp_{self.name[:-5]}'
         report_name = self.name[:-5]
 
         try:
@@ -20,7 +20,7 @@ class ReportExtractor:
         except FileNotFoundError:
             st.write(f'Folder {pathFolder} not present')
 
-        with ZipFile(f'{self.path}/{self.name}', 'r') as f:
+        with ZipFile(f'{self.path}/temp_{self.name}', 'r') as f:
             f.extractall(pathFolder)
 
         report_layout = json.loads(open(f'{pathFolder}/Report/Layout', 'r', encoding='utf-16 le').read())
@@ -36,9 +36,7 @@ class ReportExtractor:
             try:
                 Source = i['partitions'][0]['source']['expressionSource']
             except KeyError:
-                if 'expression' in i['partitions'][0]['source']:
-                	Source = i['partitions'][0]['source']['expression']
-                else:Source: [""] # type: ignore
+                Source = i['partitions'][0]['source'].get('expression', '')
             data_model.append([report_name, Name, Mode, Type, Source])
 
         data_model_df = pd.DataFrame(columns=['Report Name', 'Name', 'Mode', 'Type', 'Source'], data=data_model)
@@ -114,6 +112,13 @@ class ReportExtractor:
 
         return data_model_df, measures_df, relationship_df, fields_df, columns_df
 
+def convert_lists_to_strings(df):
+    df = df.copy()
+    for col in df.columns:
+        if df[col].apply(lambda x: isinstance(x, list)).any():
+            df[col] = df[col].apply(lambda x: ', '.join(x) if isinstance(x, list) else x)
+    return df
+
 def main():
     st.title("Power BI Template (.pbit) Extractor")
 
@@ -128,10 +133,11 @@ def main():
 
         for uploaded_file in uploaded_files:
             file_name = uploaded_file.name
-            with open(f"{file_name}", "wb") as f:
+            temp_file_name = f"temp_{file_name}"
+            with open(temp_file_name, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            extractor = ReportExtractor(".", f"{file_name}")
+            extractor = ReportExtractor(".", temp_file_name)
             data_model_df, measures_df, relationship_df, fields_df, columns_df = extractor.extract()
 
             data_model_final = pd.concat([data_model_final, data_model_df], ignore_index=True)
@@ -140,38 +146,47 @@ def main():
             fields_final = pd.concat([fields_final, fields_df], ignore_index=True)
             columns_final = pd.concat([columns_final, columns_df], ignore_index=True)
 
+            os.remove(temp_file_name)
+
+        # Convert lists to strings for display and CSV download
+        data_model_display = convert_lists_to_strings(data_model_final)
+        measures_display = convert_lists_to_strings(measures_final)
+        relationship_display = convert_lists_to_strings(relationship_final)
+        fields_display = convert_lists_to_strings(fields_final)
+        columns_display = convert_lists_to_strings(columns_final)
+
         st.success("Files processed successfully!")
 
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Data Model", "Measures", "Relationships", "Fields", "Columns"])
 
         with tab1:
             st.header("Data Model")
-            st.dataframe(data_model_final)
-            csv = data_model_final.to_csv(index=False).encode('utf-8')
+            st.dataframe(data_model_display)
+            csv = data_model_display.to_csv(index=False).encode('utf-8')
             st.download_button(label="Download Data Model as CSV", data=csv, file_name='data_model.csv', mime='text/csv')
 
         with tab2:
             st.header("Measures")
-            st.dataframe(measures_final)
-            csv = measures_final.to_csv(index=False).encode('utf-8')
+            st.dataframe(measures_display)
+            csv = measures_display.to_csv(index=False).encode('utf-8')
             st.download_button(label="Download Measures as CSV", data=csv, file_name='measures.csv', mime='text/csv')
 
         with tab3:
             st.header("Relationships")
-            st.dataframe(relationship_final)
-            csv = relationship_final.to_csv(index=False).encode('utf-8')
+            st.dataframe(relationship_display)
+            csv = relationship_display.to_csv(index=False).encode('utf-8')
             st.download_button(label="Download Relationships as CSV", data=csv, file_name='relationships.csv', mime='text/csv')
 
         with tab4:
             st.header("Fields")
-            st.dataframe(fields_final)
-            csv = fields_final.to_csv(index=False).encode('utf-8')
+            st.dataframe(fields_display)
+            csv = fields_display.to_csv(index=False).encode('utf-8')
             st.download_button(label="Download Fields as CSV", data=csv, file_name='fields.csv', mime='text/csv')
 
         with tab5:
             st.header("Columns")
-            st.dataframe(columns_final)
-            csv = columns_final.to_csv(index=False).encode('utf-8')
+            st.dataframe(columns_display)
+            csv = columns_display.to_csv(index=False).encode('utf-8')
             st.download_button(label="Download Columns as CSV", data=csv, file_name='columns.csv', mime='text/csv')
 
     st.markdown("""
